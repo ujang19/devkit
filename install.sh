@@ -56,14 +56,15 @@ Usage: bash install.sh [options]
 
 Profiles:
   --profile minimal   git, curl, gh, jq, rg, fd, fzf, uv, nvm+node
-  --profile default   minimal + docker(optional flag) + direnv + starship + infisical
-  --profile full      default + flutter + herdr + grok + ccgram hooks
+  --profile default   minimal + herdr + direnv + starship + infisical (+ docker if --with-docker)
+  --profile full      default + flutter + grok + ccgram hooks
 
 Optional components:
   --with-docker       Install Docker Engine (needs sudo)
   --with-flutter      Install Flutter SDK to ~/flutter
   --with-android      Android cmdline-tools only (needs Java)
-  --with-herdr        Install herdr TUI
+  --with-herdr        Install herdr TUI (on by default for default/full)
+  --no-herdr          Skip herdr
   --with-grok         Ensure grok/agent path hints (does not download proprietary bin)
   --with-ccgram       Install ccgram (uv tool)
   --no-infisical      Skip Infisical CLI
@@ -72,7 +73,7 @@ Optional components:
 
 Examples:
   bash install.sh --profile default --with-docker -y
-  bash install.sh --profile full --with-docker --with-flutter --with-herdr -y
+  bash install.sh --profile full --with-docker --with-flutter -y
 EOF
 }
 
@@ -83,6 +84,7 @@ while [[ $# -gt 0 ]]; do
     --with-flutter) WITH_FLUTTER=1; shift ;;
     --with-android) WITH_ANDROID=1; shift ;;
     --with-herdr) WITH_HERDR=1; shift ;;
+    --no-herdr) WITH_HERDR=0; shift ;;
     --with-grok) WITH_GROK=1; shift ;;
     --with-ccgram) WITH_CCGRAM=1; shift ;;
     --no-infisical) WITH_INFISICAL=0; shift ;;
@@ -98,12 +100,21 @@ case "$PROFILE" in
   *) die "Invalid --profile: $PROFILE (minimal|default|full)" ;;
 esac
 
+# default + full always get herdr (agent TUI stack); minimal stays lean
+if [[ "$PROFILE" == "default" || "$PROFILE" == "full" ]]; then
+  WITH_HERDR=1
+fi
+
 if [[ "$PROFILE" == "full" ]]; then
   WITH_DOCKER=1
   WITH_FLUTTER=1
   WITH_HERDR=1
   WITH_CCGRAM=1
 fi
+
+# env override (run.sh / .devkit.env)
+if [[ "${DEVKIT_WITH_HERDR:-}" == "1" ]]; then WITH_HERDR=1; fi
+if [[ "${DEVKIT_WITH_HERDR:-}" == "0" ]]; then WITH_HERDR=0; fi
 
 # ── helpers ───────────────────────────────────────────────────────────
 ensure_dirs() {

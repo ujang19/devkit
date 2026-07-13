@@ -16,6 +16,7 @@
 #   INFISICAL_ENV                     default: dev
 #   DEVKIT_PROFILE                    minimal|default|full  (default: default)
 #   DEVKIT_WITH_DOCKER                0|1  (default: 0)
+#   DEVKIT_WITH_HERDR                 0|1  (default: 1 for default/full profile)
 #   DEVKIT_SKIP_SKILLS                0|1  (default: 0)
 #   DEVKIT_SKIP_INSTALL_DEPS          0|1  (default: 0)  # bun install per app
 #   DEVKIT_KIT_REPO                   default: https://github.com/ujang19/devkit.git
@@ -48,6 +49,8 @@ done
 KIT_REPO="${DEVKIT_KIT_REPO:-https://github.com/ujang19/devkit.git}"
 PROFILE="${DEVKIT_PROFILE:-default}"
 WITH_DOCKER="${DEVKIT_WITH_DOCKER:-0}"
+# herdr on by default for default/full (user agent TUI stack)
+WITH_HERDR="${DEVKIT_WITH_HERDR:-1}"
 SKIP_SKILLS="${DEVKIT_SKIP_SKILLS:-0}"
 SKIP_DEPS="${DEVKIT_SKIP_INSTALL_DEPS:-0}"
 INFISICAL_ENV="${INFISICAL_ENV:-dev}"
@@ -89,15 +92,23 @@ step_kit() {
 
 # ── step 2: install tools ───────────────────────────────────────────────────
 step_install() {
-  log "2/7  install tools (profile=$PROFILE docker=$WITH_DOCKER)"
+  log "2/7  install tools (profile=$PROFILE docker=$WITH_DOCKER herdr=$WITH_HERDR)"
   local flags=(--profile "$PROFILE" -y)
   [[ "$WITH_DOCKER" == "1" ]] && flags+=(--with-docker)
-  bash "$HOME/linux-devkit/install.sh" "${flags[@]}"
+  if [[ "$WITH_HERDR" == "1" ]]; then
+    flags+=(--with-herdr)
+  else
+    flags+=(--no-herdr)
+  fi
+  DEVKIT_WITH_HERDR="$WITH_HERDR" bash "$HOME/linux-devkit/install.sh" "${flags[@]}"
   export PATH="${HOME}/.local/bin:${HOME}/.bun/bin:${HOME}/.opencode/bin:${HOME}/.local/go/bin:${PATH}"
   # shellcheck disable=SC1090
   [[ -f "$HOME/.bashrc" ]] && source "$HOME/.bashrc" 2>/dev/null || true
   export PATH="${HOME}/.local/bin:${HOME}/.bun/bin:${HOME}/.opencode/bin:${HOME}/.local/go/bin:${HOME}/go/bin:${PATH}"
   have devkit || die "devkit CLI missing after install"
+  if [[ "$WITH_HERDR" == "1" ]]; then
+    have herdr && ok "herdr $(herdr --version 2>/dev/null | head -1)" || warn "herdr missing after install"
+  fi
   ok "tools installed"
 }
 

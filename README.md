@@ -53,8 +53,8 @@ devkit add org-repo https://github.com/org/repo.git --path apps/org/repo --stack
 | Profile | Contents |
 |---------|----------|
 | minimal | core CLI + bun/go basics |
-| default | + PM2 path, agents tools, skills pack hook |
-| full | + docker/flutter/herdr optional flags |
+| default | + herdr, Infisical, agents tools, skills pack |
+| full | + docker/flutter/ccgram hooks |
 
 ## Skills
 
