@@ -523,6 +523,14 @@ EOF
 
 install_devkit_cli() {
   log "install devkit helper CLI"
+  if [[ -f "$HOME/linux-devkit/scripts/devkit" ]]; then
+    install -m 755 "$HOME/linux-devkit/scripts/devkit" "$LOCAL_BIN/devkit"
+    ok "devkit CLI (full)"
+    printf '%s\n' "$PROFILE" > "$DEVKIT_HOME/profile"
+    printf '%s\n' "$DEVKIT_VERSION" > "$DEVKIT_HOME/version"
+    [[ -f "$HOME/linux-devkit/projects.yaml" ]] && cp -f "$HOME/linux-devkit/projects.yaml" "$DEVKIT_HOME/projects.yaml" || true
+    return 0
+  fi
   cat > "$LOCAL_BIN/devkit" <<'EOF'
 #!/usr/bin/env bash
 # thin helper after linux-devkit install

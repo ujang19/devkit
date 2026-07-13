@@ -1,0 +1,277 @@
+#!/usr/bin/env bash
+# linux-devkit helper — multi-project + multi-VPS restore
+set -euo pipefail
+
+DEVKIT_HOME="${DEVKIT_HOME:-$HOME/.linux-devkit}"
+REGISTRY="${DEVKIT_REGISTRY:-}"
+if [[ -z "$REGISTRY" ]]; then
+  for c in \
+    "$HOME/linux-devkit/projects.yaml" \
+    "$DEVKIT_HOME/projects.yaml" \
+    "$HOME/devkit/projects.yaml"
+  do
+    [[ -f "$c" ]] && REGISTRY="$c" && break
+  done
+fi
+REGISTRY="${REGISTRY:-$HOME/linux-devkit/projects.yaml}"
+
+need_yaml() {
+  python3 -c "import yaml" 2>/dev/null && return 0
+  pip3 install --user pyyaml -q 2>/dev/null || true
+  python3 -c "import yaml" 2>/dev/null || {
+    echo "need pyyaml: pip3 install --user pyyaml" >&2
+    exit 1
+  }
+}
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+  doctor)
+    echo "linux-devkit doctor"
+    for c in git curl gh jq rg fd fzf uv node npm bun go opencode python3 docker flutter herdr infisical direnv starship pm2; do
+      if command -v "$c" >/dev/null 2>&1; then
+        printf '  ✓ %-12s %s\n' "$c" "$(command -v "$c")"
+      else
+        printf '  · %-12s (missing)\n' "$c"
+      fi
+    done
+    echo
+    echo "registry: $REGISTRY"
+    [[ -f "$REGISTRY" ]] && echo "  ✓ found" || echo "  · missing"
+    ;;
+
+  list|ls)
+    need_yaml
+    [[ -f "$REGISTRY" ]] || { echo "No registry at $REGISTRY"; exit 1; }
+    python3 - "$REGISTRY" <<'PY'
+import sys
+from pathlib import Path
+import yaml
+data = yaml.safe_load(Path(sys.argv[1]).read_text()) or {}
+root = data.get("workspace_root", "~/projects")
+print(f"workspace: {root}")
+print(f"projects ({len(data.get('projects') or {})}):")
+for name, p in (data.get("projects") or {}).items():
+    if not isinstance(p, dict):
+        continue
+    repo = p.get("repo") or "(no remote)"
+    path_p = p.get("path", name)
+    stack = p.get("stack", "?")
+    tags = ",".join(p.get("tags") or [])
+    print(f"  • {name:16}  {path_p:28}  {stack:8}  {repo}  [{tags}]")
+PY
+    ;;
+
+  restore)
+    need_yaml
+    [[ -f "$REGISTRY" ]] || { echo "No registry at $REGISTRY"; exit 1; }
+    ONLY="${1:-}"
+    python3 - "$REGISTRY" "$ONLY" <<'PY'
+import os, subprocess, sys
+from pathlib import Path
+import yaml
+
+def expand(p: str) -> Path:
+    return Path(os.path.expanduser(p)).resolve()
+
+reg = Path(sys.argv[1])
+only = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None
+data = yaml.safe_load(reg.read_text()) or {}
+root = expand(data.get("workspace_root", "~/projects"))
+root.mkdir(parents=True, exist_ok=True)
+defaults = data.get("defaults") or {}
+default_branch = defaults.get("branch", "main")
+projects = data.get("projects") or {}
+ok = fail = skip = 0
+
+def run(cmd, cwd=None):
+    print(f"    $ {' '.join(cmd)}")
+    subprocess.run(cmd, cwd=cwd, check=False)
+
+for name, cfg in projects.items():
+    if only and name != only:
+        continue
+    if not isinstance(cfg, dict):
+        continue
+    print(f"\n==> {name}")
+    rel = cfg.get("path") or name
+    dest = root / rel
+    repo = (cfg.get("repo") or "").strip()
+    branch = cfg.get("branch") or default_branch
+    local_source = cfg.get("local_source")
+    stack = cfg.get("stack", "")
+
+    if dest.exists() and (dest / ".git").exists():
+        print(f"  ✓ already cloned: {dest}")
+        run(["git", "-C", str(dest), "fetch", "--all", "--prune"])
+        run(["git", "-C", str(dest), "pull", "--ff-only"])
+        ok += 1
+    elif dest.exists():
+        print(f"  · exists (not git): {dest}")
+        skip += 1
+    elif repo:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        print(f"  clone {repo} → {dest}")
+        env = os.environ.copy()
+        r = subprocess.run(["git", "clone", "--branch", branch, repo, str(dest)], env=env)
+        if r.returncode != 0:
+            r = subprocess.run(["git", "clone", repo, str(dest)], env=env)
+        if r.returncode != 0:
+            print("  ✗ clone failed")
+            fail += 1
+            continue
+        ok += 1
+    elif local_source:
+        src = expand(local_source)
+        if src.exists():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if not dest.exists():
+                dest.symlink_to(src)
+                print(f"  ✓ linked {dest} → {src}")
+            ok += 1
+        else:
+            print(f"  · local_source missing: {src}")
+            skip += 1
+    else:
+        print("  · no repo URL — create stub")
+        dest.mkdir(parents=True, exist_ok=True)
+        skip += 1
+        continue
+
+    for step in (cfg.get("post_clone") or []):
+        print(f"  post: {step}")
+        subprocess.run(step, shell=True, cwd=str(dest))
+
+    if not cfg.get("post_clone") and dest.exists():
+        if stack in ("node", "bun") and (dest / "package.json").exists():
+            if (dest / "bun.lockb").exists() or (dest / "bun.lock").exists():
+                run(["bun", "install"], cwd=str(dest))
+            elif (dest / "pnpm-lock.yaml").exists():
+                run(["pnpm", "install"], cwd=str(dest))
+            else:
+                run(["npm", "install"], cwd=str(dest))
+        if stack == "flutter" and (dest / "pubspec.yaml").exists():
+            run(["flutter", "pub", "get"], cwd=str(dest))
+        if stack == "python" and (dest / "pyproject.toml").exists():
+            run(["uv", "sync"], cwd=str(dest))
+        if stack == "go" and (dest / "go.mod").exists():
+            run(["go", "mod", "download"], cwd=str(dest))
+
+print(f"\nDone. ok={ok} skip={skip} fail={fail}")
+print(f"Workspace: {root}")
+PY
+    mkdir -p "$DEVKIT_HOME"
+    cp -f "$REGISTRY" "$DEVKIT_HOME/projects.yaml" 2>/dev/null || true
+    ;;
+
+  add)
+    name="${1:-}"; repo="${2:-}"
+    [[ -n "$name" && -n "$repo" ]] || { echo "usage: devkit add <name> <git-url> [--path apps/org/repo] [--stack bun]"; exit 1; }
+    shift 2 || true
+    path="apps/${name//-//}"
+    stack="bun"
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --path) path="$2"; shift 2 ;;
+        --stack) stack="$2"; shift 2 ;;
+        *) echo "unknown: $1"; exit 1 ;;
+      esac
+    done
+    need_yaml
+    mkdir -p "$(dirname "$REGISTRY")"
+    [[ -f "$REGISTRY" ]] || cat > "$REGISTRY" <<'Y'
+version: 1
+workspace_root: ~/projects
+defaults:
+  branch: main
+projects: {}
+Y
+    python3 - "$REGISTRY" "$name" "$repo" "$path" "$stack" <<'PY'
+import sys
+from pathlib import Path
+import yaml
+path = Path(sys.argv[1])
+name, repo, p, stack = sys.argv[2:6]
+data = yaml.safe_load(path.read_text()) if path.exists() else {}
+data = data or {}
+data.setdefault("version", 1)
+data.setdefault("workspace_root", "~/projects")
+data.setdefault("defaults", {"branch": "main"})
+data.setdefault("projects", {})
+parts = p.split("/")
+org = parts[1] if len(parts) >= 2 and parts[0] == "apps" else name.split("-")[0]
+data["projects"][name] = {
+    "path": p,
+    "repo": repo,
+    "branch": "main",
+    "stack": stack,
+    "description": name,
+    "org": org,
+    "pm2": name,
+    "tags": [org, "product"],
+}
+path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+print(f"added {name} → {p} ({repo})")
+PY
+    echo "Run: devkit restore $name"
+    ;;
+
+  path)
+    name="${1:-}"
+    [[ -n "$name" ]] || { echo "usage: devkit path <name>"; exit 1; }
+    need_yaml
+    python3 - "$REGISTRY" "$name" <<'PY'
+import os, sys
+from pathlib import Path
+import yaml
+data = yaml.safe_load(Path(sys.argv[1]).read_text()) or {}
+name = sys.argv[2]
+p = (data.get("projects") or {}).get(name)
+if not p:
+    sys.exit(f"unknown project: {name}")
+root = Path(os.path.expanduser(data.get("workspace_root", "~/projects")))
+print(root / p.get("path", name))
+PY
+    ;;
+
+  sync-registry)
+    mkdir -p "$DEVKIT_HOME"
+    cp -f "$REGISTRY" "$DEVKIT_HOME/projects.yaml"
+    echo "synced → $DEVKIT_HOME/projects.yaml"
+    ;;
+
+  new)
+    kind="${1:-}"; name="${2:-}"
+    [[ -n "$kind" && -n "$name" ]] || { echo "usage: devkit new <web|api|mobile|python> <name>"; exit 1; }
+    root="$HOME/projects"
+    case "$kind" in
+      web) dir="$root/sandbox/$name"; mkdir -p "$dir"; (cd "$dir" && bun create vite . --template react-ts) || true ;;
+      api) dir="$root/sandbox/$name"; mkdir -p "$dir"; (cd "$dir" && bun init -y) ;;
+      mobile) dir="$root/sandbox/$name"; flutter create "$dir" ;;
+      python) dir="$root/sandbox/$name"; mkdir -p "$dir"; (cd "$dir" && uv init) ;;
+      *) echo "unknown kind: $kind"; exit 1 ;;
+    esac
+    echo "created: $dir"
+    ;;
+
+  help|*)
+    cat <<H
+devkit — multi-project / multi-VPS helper
+
+  devkit doctor              check tools
+  devkit list                list projects from projects.yaml
+  devkit add NAME REPO       register a git project
+  devkit restore             clone/pull ALL projects
+  devkit restore NAME        restore one project
+  devkit path NAME           print project directory
+  devkit sync-registry       copy projects.yaml → ~/.linux-devkit/
+  devkit new web|api|mobile|python NAME
+
+Full VM setup:
+  bash ~/linux-devkit/run.sh
+  # or: curl -fsSL https://raw.githubusercontent.com/ujang19/devkit/main/run.sh | bash
+H
+    ;;
+esac
