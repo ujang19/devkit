@@ -202,7 +202,7 @@ install_apt_base() {
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates curl wget git unzip zip tar xz-utils \
     build-essential pkg-config \
-    python3 python3-pip python3-venv \
+    python3 python3-pip python3-venv python3-yaml \
     jq tree tmux htop openssh-client \
     software-properties-common gnupg lsb-release \
     libssl-dev zlib1g-dev || warn "some apt packages failed"

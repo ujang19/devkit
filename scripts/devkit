@@ -17,9 +17,19 @@ REGISTRY="${REGISTRY:-$HOME/linux-devkit/projects.yaml}"
 
 need_yaml() {
   python3 -c "import yaml" 2>/dev/null && return 0
-  pip3 install --user pyyaml -q 2>/dev/null || true
+  # try system package first
+  if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-yaml >/dev/null 2>&1 || true
+  fi
+  python3 -c "import yaml" 2>/dev/null && return 0
+  pip3 install --user pyyaml -q 2>/dev/null || pip3 install --user pyyaml -q --break-system-packages 2>/dev/null || true
+  python3 -c "import yaml" 2>/dev/null && return 0
+  # last resort: uv
+  if command -v uv >/dev/null 2>&1; then
+    uv pip install --python "$(command -v python3)" pyyaml -q 2>/dev/null || true
+  fi
   python3 -c "import yaml" 2>/dev/null || {
-    echo "need pyyaml: pip3 install --user pyyaml" >&2
+    echo "need pyyaml. Try: sudo apt-get install -y python3-yaml" >&2
     exit 1
   }
 }
