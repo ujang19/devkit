@@ -54,10 +54,20 @@ export GOPATH="${GOPATH:-$HOME/go}"
 export INFISICAL_DOMAIN="${INFISICAL_DOMAIN:-https://app.infisical.com/api}"
 export INFISICAL_ENV="${INFISICAL_ENV:-dev}"
 
+_status() {
+  # print SET/NOT SET without leaking values
+  local v="${1:-}"
+  if [[ -n "$v" ]]; then
+    printf 'SET (%s chars)' "${#v}"
+  else
+    printf 'NOT SET'
+  fi
+}
+
 echo "✓ loaded: ${_ENV_FILE}"
-echo "  GH_TOKEN:          ${GH_TOKEN:+set (${#GH_TOKEN} chars)}${GH_TOKEN:-NOT SET}"
-echo "  INFISICAL_CLIENT:  ${INFISICAL_UNIVERSAL_AUTH_CLIENT_ID:+set}${INFISICAL_UNIVERSAL_AUTH_CLIENT_ID:-NOT SET}"
-echo "  INFISICAL_SECRET:  ${INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET:+set (${#INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET} chars)}${INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET:-NOT SET}"
+echo "  GH_TOKEN:          $(_status "${GH_TOKEN:-}")"
+echo "  INFISICAL_CLIENT:  $(_status "${INFISICAL_UNIVERSAL_AUTH_CLIENT_ID:-}")"
+echo "  INFISICAL_SECRET:  $(_status "${INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET:-}")"
 echo "  INFISICAL_DOMAIN:  ${INFISICAL_DOMAIN}"
 echo "  INFISICAL_ENV:     ${INFISICAL_ENV}"
 echo ""
