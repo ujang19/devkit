@@ -1,45 +1,32 @@
 #!/usr/bin/env bash
-# ONE command on a brand-new Ubuntu VPS
+# Thin wrapper → full setup (run.sh)
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/ujang19/devkit/main/bootstrap-vps.sh | bash
+#
+# With secrets:
+#   export GH_TOKEN=...
+#   export INFISICAL_UNIVERSAL_AUTH_CLIENT_ID=...
+#   export INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET=...
+#   curl -fsSL .../bootstrap-vps.sh | bash
 set -euo pipefail
 
-PROFILE="${DEVKIT_PROFILE:-default}"
-WITH_DOCKER="${DEVKIT_WITH_DOCKER:-1}"
-KIT_REPO="${DEVKIT_KIT_REPO:-}"   # e.g. https://github.com/ujang19/devkit.git
+KIT_REPO="${DEVKIT_KIT_REPO:-https://github.com/ujang19/devkit.git}"
+export PATH="${HOME}/.local/bin:${PATH}"
 
-export PATH="$HOME/.local/bin:$PATH"
-
-if [[ -n "$KIT_REPO" ]]; then
-  git clone "$KIT_REPO" "$HOME/linux-devkit" 2>/dev/null \
-    || (cd "$HOME/linux-devkit" && git pull --ff-only)
-  bash "$HOME/linux-devkit/install.sh" --profile "$PROFILE" $([[ "$WITH_DOCKER" == "1" ]] && echo --with-docker) -y
-else
-  # fallback: only installer if kit repo not set
-  if [[ -f "$HOME/linux-devkit/install.sh" ]]; then
-    bash "$HOME/linux-devkit/install.sh" --profile "$PROFILE" $([[ "$WITH_DOCKER" == "1" ]] && echo --with-docker) -y
+if ! command -v git >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
+  if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    sudo apt-get update -y
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git curl ca-certificates
   else
-    echo "Set DEVKIT_KIT_REPO=git@github.com:ujang19/devkit.git"
+    echo "Need git + curl. Install: sudo apt-get install -y git curl" >&2
     exit 1
   fi
 fi
 
-export PATH="$HOME/.local/bin:$PATH"
-# restore all apps
-if command -v devkit >/dev/null; then
-  devkit restore || true
-  devkit doctor || true
+if [[ -f "${HOME}/linux-devkit/run.sh" ]]; then
+  git -C "${HOME}/linux-devkit" pull --ff-only 2>/dev/null || true
+else
+  git clone --depth 1 "${KIT_REPO}" "${HOME}/linux-devkit"
 fi
 
-# Agent skills pack
-if [[ -x "$HOME/linux-devkit/scripts/install-skills.sh" ]]; then
-  bash "$HOME/linux-devkit/scripts/install-skills.sh" || true
-elif [[ -x "$HOME/devkit/scripts/install-skills.sh" ]]; then
-  bash "$HOME/devkit/scripts/install-skills.sh" || true
-fi
-
-
-echo
-echo "Next: gh auth login  (if not already)"
-echo "      infisical login"
-echo "      cd \$(devkit path wabase)   # etc"
+exec bash "${HOME}/linux-devkit/run.sh"

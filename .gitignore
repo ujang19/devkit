@@ -7,3 +7,6 @@
 --help/
 node_modules/
 .cache/
+
+.devkit.env
+*.env.local
