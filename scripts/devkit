@@ -98,7 +98,11 @@ ok = fail = skip = 0
 
 def run(cmd, cwd=None):
     print(f"    $ {' '.join(cmd)}")
-    subprocess.run(cmd, cwd=cwd, check=False)
+    try:
+        return subprocess.run(cmd, cwd=cwd, check=False)
+    except FileNotFoundError:
+        print(f"    ! command not found: {cmd[0]}")
+        return None
 
 for name, cfg in projects.items():
     if only and name != only:
@@ -156,12 +160,21 @@ for name, cfg in projects.items():
 
     if not cfg.get("post_clone") and dest.exists():
         if stack in ("node", "bun") and (dest / "package.json").exists():
-            if (dest / "bun.lockb").exists() or (dest / "bun.lock").exists():
+            import shutil
+            if shutil.which("bun") and (
+                stack == "bun"
+                or (dest / "bun.lockb").exists()
+                or (dest / "bun.lock").exists()
+            ):
                 run(["bun", "install"], cwd=str(dest))
-            elif (dest / "pnpm-lock.yaml").exists():
+            elif shutil.which("pnpm") and (dest / "pnpm-lock.yaml").exists():
                 run(["pnpm", "install"], cwd=str(dest))
-            else:
+            elif shutil.which("npm"):
                 run(["npm", "install"], cwd=str(dest))
+            elif shutil.which("bun"):
+                run(["bun", "install"], cwd=str(dest))
+            else:
+                print("    ! no bun/npm/pnpm available — skip install")
         if stack == "flutter" and (dest / "pubspec.yaml").exists():
             run(["flutter", "pub", "get"], cwd=str(dest))
         if stack == "python" and (dest / "pyproject.toml").exists():
