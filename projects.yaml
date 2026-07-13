@@ -1,0 +1,94 @@
+# Multi-repo per product (org)
+# Path rule: ~/projects/apps/<org>/<repo>
+#
+# Examples:
+#   ~/projects/apps/wabase/core
+#   ~/projects/apps/wazapin/platform
+#   ~/projects/apps/wazapin/web
+#   ~/projects/apps/usebetterpay/betterpay
+
+version: 1
+
+workspace_root: ~/projects
+
+defaults:
+  branch: main
+  post_clone: []
+
+projects:
+  # ── wabase/* ─────────────────────────────────────────────
+  wabase-core:
+    path: apps/wabase/core
+    repo: https://github.com/wabase/core.git
+    branch: main
+    stack: bun
+    description: "Wabase core API/service"
+    org: wabase
+    pm2: wabase-core
+    port: 3001
+    infisical: wabase
+    tags: [wabase, product]
+
+  # Tambah repo wabase lain di sini, contoh:
+  # wabase-web:
+  #   path: apps/wabase/web
+  #   repo: https://github.com/wabase/web.git
+  #   org: wabase
+  #   stack: bun
+  #   pm2: wabase-web
+  #   port: 3002
+  #   infisical: wabase
+
+  # ── wazapin/* ────────────────────────────────────────────
+  wazapin-platform:
+    path: apps/wazapin/platform
+    repo: https://github.com/wazapin/platform.git
+    branch: main
+    stack: bun
+    description: "Wazapin platform"
+    org: wazapin
+    pm2: wazapin-platform
+    port: 3101
+    infisical: wazapin
+    tags: [wazapin, product]
+
+  wazapin-web:
+    path: apps/wazapin/web
+    repo: https://github.com/wazapin/web.git
+    branch: main
+    stack: bun
+    description: "Wazapin web"
+    org: wazapin
+    pm2: wazapin-web
+    port: 3102
+    infisical: wazapin
+    tags: [wazapin, product, web]
+
+  # ── usebetterpay/* ───────────────────────────────────────
+  betterpay:
+    path: apps/usebetterpay/betterpay
+    repo: https://github.com/usebetterpay/betterpay.git
+    branch: main
+    stack: bun
+    description: "Betterpay"
+    org: usebetterpay
+    pm2: betterpay
+    port: 3201
+    infisical: betterpay
+    tags: [betterpay, product]
+
+# Layout on every machine:
+#
+# ~/projects/apps/
+#   wabase/
+#     core/              ← wabase/core
+#     web/               ← wabase/web (when you add it)
+#   wazapin/
+#     platform/          ← wazapin/platform
+#     web/               ← wazapin/web
+#   usebetterpay/
+#     betterpay/         ← usebetterpay/betterpay
+#
+# Add new repo under same org:
+#   devkit add wabase-api https://github.com/wabase/api.git \
+#     --path apps/wabase/api --stack bun

@@ -1,0 +1,29 @@
+# Standard agent skills pack (global)
+# Install: bash scripts/install-skills.sh
+# Or: npx skills@latest add <source> -g -a '*' -y
+
+# --- Design / motion (emilkowalski) ---
+emilkowalski/skills --skill *
+
+# --- Engineering workflows (mattpocock) ---
+# includes grill-me, diagnose, tdd, code-review, etc.
+mattpocock/skills --skill *
+
+# --- UI ---
+https://github.com/shadcn/ui --skill shadcn
+shadcn/improve --skill *
+
+# --- Superpowers (obra) ---
+obra/superpowers --skill *
+
+# --- Transitions ---
+https://github.com/jakubantalik/transitions-dev --skill transitions-dev
+
+# --- Design quality ---
+pbakaus/impeccable --skill *
+
+# --- Workspace (ours) ---
+# after install.sh places skill under ~/.agents/skills/devkit:
+# npx skills@latest add ~/.agents/skills --skill devkit -g -a '*' -y
+# or from kit:
+# npx skills@latest add ./skills --skill devkit -g -a '*' -y

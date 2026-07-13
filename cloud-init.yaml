@@ -1,0 +1,62 @@
+#cloud-config
+# linux-devkit — bootstrap a fresh Ubuntu 22.04/24.04 VM
+#
+# Usage (examples):
+#   # Hetzner / DigitalOcean: paste as user-data
+#   # Proxmox: Cloud-Init → User Data
+#   # multipass:
+#   #   multipass launch --name dev --cloud-init cloud-init.yaml
+#
+# After first boot:
+#   ssh user@vm
+#   devkit doctor
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - curl
+  - ca-certificates
+  - git
+  - unzip
+  - tar
+  - xz-utils
+  - build-essential
+  - python3
+  - python3-venv
+  - jq
+  - tmux
+  - htop
+
+users:
+  - default
+
+write_files:
+  - path: /usr/local/bin/linux-devkit-bootstrap
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      # Install for the primary login user (uid 1000) if present
+      U="$(getent passwd 1000 | cut -d: -f1 || true)"
+      if [ -z "$U" ]; then
+        U="$(id -un)"
+      fi
+      HOME_DIR="$(getent passwd "$U" | cut -d: -f6)"
+      export HOME="$HOME_DIR"
+      # Prefer a local copy if you bake install.sh into the image; else fetch.
+      INSTALLER="${HOME_DIR}/linux-devkit/install.sh"
+      if [ -f "$INSTALLER" ]; then
+        sudo -u "$U" -H bash "$INSTALLER" --profile default --with-docker -y
+      else
+        # TODO: ganti URL ke raw GitHub / gist / object storage kamu
+        sudo -u "$U" -H bash -lc \
+          'curl -fsSL https://raw.githubusercontent.com/ujang19/devkit/main/install.sh | bash -s -- --profile default --with-docker -y'
+      fi
+
+runcmd:
+  - [ /usr/local/bin/linux-devkit-bootstrap ]
+
+final_message: |
+  linux-devkit bootstrap finished (or still running).
+  Log in and run:  devkit doctor
